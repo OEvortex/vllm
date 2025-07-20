@@ -84,13 +84,12 @@ class DhanishthaToolPhaser(ToolParser):
         
         if (self.tool_call_start_token_id is None
                 or self.tool_call_end_token_id is None):
-            logger.error("Tool call tokens not found in vocabulary. Available tokens with 'tool' in name:")
+            logger.warning("Tool call tokens not found in vocabulary - using text-based detection only")
+            logger.warning("Available tokens with 'tool' in name:")
             tool_tokens = [(token, id) for token, id in self.vocab.items() if 'tool' in token.lower()]
             for token, token_id in tool_tokens[:10]:  # Show first 10 matches
-                logger.error(f"  '{token}': {token_id}")
-            raise RuntimeError(
-                "Dhanishtha Tool parser could not locate tool call start/end "
-                "tokens in the tokenizer!")
+                logger.warning(f"  '{token}': {token_id}")
+            logger.info("Parser will continue using text-based detection as fallback")
 
     def extract_tool_calls(
         self,
