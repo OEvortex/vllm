@@ -39,6 +39,7 @@ class DhanishthaToolPhaser(ToolParser):
         self.current_tool_id: int = -1
         self.streamed_args_for_tool: list[str] = [
         ]  # map what has been streamed for each tool so far to a list
+        self.tool_call_ids: list[str] = []  # track IDs for each tool call
 
         self.tool_call_start_token: str = "<tool_call>"
         self.tool_call_end_token: str = "</tool_call>"
@@ -127,9 +128,17 @@ class DhanishthaToolPhaser(ToolParser):
 
         logger.debug("delta_text: %s", delta_text)
         logger.debug("delta_token_ids: %s", delta_token_ids)
-        # check to see if we should be streaming a tool call - is there a
-        if self.tool_call_start_token_id not in current_token_ids:
-            logger.debug("No tool call tokens found!")
+        
+        # Count tool call start & end tags to determine if we're in a tool call
+        cur_tool_start_count = current_token_ids.count(
+            self.tool_call_start_token_id)
+        cur_tool_end_count = current_token_ids.count(
+            self.tool_call_end_token_id)
+        
+        # Check if we're currently in a tool call or if there are no tool call tokens
+        if (self.tool_call_start_token_id not in current_token_ids and 
+            cur_tool_start_count == cur_tool_end_count):
+            logger.debug("No tool call tokens found and not in a tool call!")
             return DeltaMessage(content=delta_text)
 
         try:
@@ -189,6 +198,7 @@ class DhanishthaToolPhaser(ToolParser):
                 self.current_tool_id += 1
                 self.current_tool_name_sent = False
                 self.streamed_args_for_tool.append("")
+                self.tool_call_ids.append("")  # placeholder for tool call ID
                 logger.debug("Starting on a new tool %s", self.current_tool_id)
 
             # case -- we're updating an existing tool call
@@ -224,6 +234,7 @@ class DhanishthaToolPhaser(ToolParser):
                         += diff
                     return DeltaMessage(tool_calls=[
                         DeltaToolCall(index=self.current_tool_id,
+                                      id=self.tool_call_ids[self.current_tool_id] if self.current_tool_id < len(self.tool_call_ids) else None,
                                       function=DeltaFunctionCall(
                                           arguments=diff).model_dump(
                                               exclude_none=True))
@@ -257,10 +268,13 @@ class DhanishthaToolPhaser(ToolParser):
                 function_name: Union[str, None] = current_tool_call.get("name")
                 if function_name:
                     self.current_tool_name_sent = True
+                    # Generate and store the tool call ID
+                    tool_call_id = random_tool_call_id()
+                    self.tool_call_ids[self.current_tool_id] = tool_call_id
                     return DeltaMessage(tool_calls=[
                         DeltaToolCall(index=self.current_tool_id,
                                       type="function",
-                                      id=random_tool_call_id(),
+                                      id=tool_call_id,
                                       function=DeltaFunctionCall(
                                           name=function_name).model_dump(
                                               exclude_none=True))
@@ -332,6 +346,7 @@ class DhanishthaToolPhaser(ToolParser):
 
                 delta = DeltaMessage(tool_calls=[
                     DeltaToolCall(index=self.current_tool_id,
+                                  id=self.tool_call_ids[self.current_tool_id] if self.current_tool_id < len(self.tool_call_ids) else None,
                                   function=DeltaFunctionCall(
                                       arguments=arguments_delta).model_dump(
                                           exclude_none=True))
@@ -349,6 +364,7 @@ class DhanishthaToolPhaser(ToolParser):
 
                 delta = DeltaMessage(tool_calls=[
                     DeltaToolCall(index=self.current_tool_id,
+                                  id=self.tool_call_ids[self.current_tool_id] if self.current_tool_id < len(self.tool_call_ids) else None,
                                   function=DeltaFunctionCall(
                                       arguments=delta_text).model_dump(
                                           exclude_none=True))
