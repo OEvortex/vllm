@@ -158,16 +158,17 @@ class DhanishthaToolPhaser(ToolParser):
         logger.debug("delta_text: %s", delta_text)
         logger.debug("delta_token_ids: %s", delta_token_ids)
         
-        # Use both text-based and token-based detection for robustness
-        # First check if there are tool call tokens in the current text
-        has_tool_call_in_text = self.tool_call_start_token in current_text
-        has_tool_call_in_tokens = (self.tool_call_start_token_id is not None and 
-                                  self.tool_call_start_token_id in current_token_ids)
-        
-        # If neither text nor token detection finds tool calls, return as content
-        if not has_tool_call_in_text and not has_tool_call_in_tokens:
-            logger.debug("No tool call tokens found (checked both text and token IDs)!")
-            return DeltaMessage(content=delta_text)
+        # Check if we should be streaming a tool call 
+        # If token IDs are available, use them (like Hermes parser)
+        if self.tool_call_start_token_id is not None:
+            if self.tool_call_start_token_id not in current_token_ids:
+                logger.debug("No tool call tokens found!")
+                return DeltaMessage(content=delta_text)
+        else:
+            # Fallback to text-based detection when token IDs not available
+            if self.tool_call_start_token not in current_text:
+                logger.debug("No tool call text found!")
+                return DeltaMessage(content=delta_text)
 
         try:
 
