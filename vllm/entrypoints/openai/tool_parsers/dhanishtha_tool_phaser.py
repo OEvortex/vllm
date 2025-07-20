@@ -129,16 +129,9 @@ class DhanishthaToolPhaser(ToolParser):
         logger.debug("delta_text: %s", delta_text)
         logger.debug("delta_token_ids: %s", delta_token_ids)
         
-        # Count tool call start & end tags to determine if we're in a tool call
-        cur_tool_start_count = current_token_ids.count(
-            self.tool_call_start_token_id)
-        cur_tool_end_count = current_token_ids.count(
-            self.tool_call_end_token_id)
-        
-        # Check if we're currently in a tool call or if there are no tool call tokens
-        if (self.tool_call_start_token_id not in current_token_ids and 
-            cur_tool_start_count == cur_tool_end_count):
-            logger.debug("No tool call tokens found and not in a tool call!")
+        # check to see if we should be streaming a tool call - is there a
+        if self.tool_call_start_token_id not in current_token_ids:
+            logger.debug("No tool call tokens found!")
             return DeltaMessage(content=delta_text)
 
         try:
