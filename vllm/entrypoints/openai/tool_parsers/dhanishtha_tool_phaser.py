@@ -56,10 +56,40 @@ class DhanishthaToolPhaser(ToolParser):
         self.tool_call_start_token_id = self.vocab.get(
             self.tool_call_start_token)
         self.tool_call_end_token_id = self.vocab.get(self.tool_call_end_token)
+        
+        # If tokens are not found in vocab as single tokens, try encoding them
+        if self.tool_call_start_token_id is None:
+            try:
+                start_tokens = self.model_tokenizer.encode(
+                    self.tool_call_start_token, add_special_tokens=False)
+                if len(start_tokens) == 1:
+                    self.tool_call_start_token_id = start_tokens[0]
+                    logger.info(f"Found start token via encoding: {self.tool_call_start_token_id}")
+            except Exception as e:
+                logger.warning(f"Could not encode start token: {e}")
+        
+        if self.tool_call_end_token_id is None:
+            try:
+                end_tokens = self.model_tokenizer.encode(
+                    self.tool_call_end_token, add_special_tokens=False)
+                if len(end_tokens) == 1:
+                    self.tool_call_end_token_id = end_tokens[0]
+                    logger.info(f"Found end token via encoding: {self.tool_call_end_token_id}")
+            except Exception as e:
+                logger.warning(f"Could not encode end token: {e}")
+        
+        # Add debug logging for token IDs
+        logger.info(f"Dhanishtha Tool Parser - Start token '{self.tool_call_start_token}' ID: {self.tool_call_start_token_id}")
+        logger.info(f"Dhanishtha Tool Parser - End token '{self.tool_call_end_token}' ID: {self.tool_call_end_token_id}")
+        
         if (self.tool_call_start_token_id is None
                 or self.tool_call_end_token_id is None):
+            logger.error("Tool call tokens not found in vocabulary. Available tokens with 'tool' in name:")
+            tool_tokens = [(token, id) for token, id in self.vocab.items() if 'tool' in token.lower()]
+            for token, token_id in tool_tokens[:10]:  # Show first 10 matches
+                logger.error(f"  '{token}': {token_id}")
             raise RuntimeError(
-                "Hermes 2 Pro Tool parser could not locate tool call start/end "
+                "Dhanishtha Tool parser could not locate tool call start/end "
                 "tokens in the tokenizer!")
 
     def extract_tool_calls(
@@ -129,23 +159,29 @@ class DhanishthaToolPhaser(ToolParser):
         logger.debug("delta_text: %s", delta_text)
         logger.debug("delta_token_ids: %s", delta_token_ids)
         
-        # check to see if we should be streaming a tool call - is there a
-        if self.tool_call_start_token_id not in current_token_ids:
-            logger.debug("No tool call tokens found!")
+        # Use both text-based and token-based detection for robustness
+        # First check if there are tool call tokens in the current text
+        has_tool_call_in_text = self.tool_call_start_token in current_text
+        has_tool_call_in_tokens = (self.tool_call_start_token_id is not None and 
+                                  self.tool_call_start_token_id in current_token_ids)
+        
+        # If neither text nor token detection finds tool calls, return as content
+        if not has_tool_call_in_text and not has_tool_call_in_tokens:
+            logger.debug("No tool call tokens found (checked both text and token IDs)!")
             return DeltaMessage(content=delta_text)
 
         try:
 
             # figure out where we are in the parsing by counting tool call
-            # start & end tags
-            prev_tool_start_count = previous_token_ids.count(
-                self.tool_call_start_token_id)
-            prev_tool_end_count = previous_token_ids.count(
-                self.tool_call_end_token_id)
-            cur_tool_start_count = current_token_ids.count(
-                self.tool_call_start_token_id)
-            cur_tool_end_count = current_token_ids.count(
-                self.tool_call_end_token_id)
+            # start & end tags using text-based detection
+            prev_tool_start_count = previous_text.count(
+                self.tool_call_start_token)
+            prev_tool_end_count = previous_text.count(
+                self.tool_call_end_token)
+            cur_tool_start_count = current_text.count(
+                self.tool_call_start_token)
+            cur_tool_end_count = current_text.count(
+                self.tool_call_end_token)
             tool_call_portion = None
             text_portion = None
 
